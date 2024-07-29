@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 )
 
 func main() {
-	fmt.Println("Hello!")
+	os := runtime.GOOS
+	fmt.Println(os)
 }

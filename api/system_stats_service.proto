@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package system_stats;
+option go_package = "internal/pb";
+
+service SystemStatsService {
+    rpc StreamSystemStats(SystemStatsRequest) returns(stream SystemStatsResponse);
+}
+
+message SystemStatsRequest {}
+
+message CPU {
+    double user_mode = 1;
+    double system_mode = 2;
+    double idle = 3;
+}
+
+message Disk {
+    string mounted = 1;
+    string use = 2;
+    string iuse = 3;
+}
+
+message IoStat {
+    string disk_device = 1;
+    double tps = 2;
+    double kb_read = 3;
+    double kb_wrtn = 4;
+}
+
+message NetStat {
+    string program = 1;
+    int32 pid = 2;
+    string user = 3;
+    string protocol = 4;
+    int32 port = 5;
+    string state = 6;
+}
+
+message TCPStat {
+	int32 all = 1;
+	int32 estab = 2;
+	int32 closed = 3;
+	int32 orphaned = 4;
+	int32 timewait = 5;   
+}
+
+message SystemStatsResponse {
+    double load_average = 1;
+    CPU cpu = 2;
+    repeated Disk disks = 3;
+    repeated IoStat iostat = 4;
+    repeated NetStat netstat = 5;
+    TCPStat tcpstat = 6;
+}

@@ -5,3 +5,16 @@ install-lint-deps:
 
 lint: install-lint-deps
 	golangci-lint run ./...
+
+test:
+	go test ./...
+
+generate:
+	rm -rf internal/pb
+	mkdir -p internal/pb
+
+	protoc \
+	--proto_path=./api \
+	--go_out=./ \
+	--go-grpc_out=./ \
+	api/*.proto
