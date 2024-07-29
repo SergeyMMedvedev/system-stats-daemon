@@ -17,7 +17,7 @@ func TestCollectStatsLinux(t *testing.T) {
 	if os != "linux" {
 		t.Skip(fmt.Printf("skip wmic test for %s", os))
 	}
-	var cfg = c.Config{
+	cfg := c.Config{
 		StatsParams: c.StatsParamsConf{
 			OS:          c.OSLinux,
 			M:           2,
@@ -63,7 +63,7 @@ func TestCollectStatsWin(t *testing.T) {
 	if os != "windows" {
 		t.Skip(fmt.Printf("skip wmic test for %s", os))
 	}
-	var cfg = c.Config{
+	cfg := c.Config{
 		StatsParams: c.StatsParamsConf{
 			OS:          c.OSWindows,
 			M:           2,
