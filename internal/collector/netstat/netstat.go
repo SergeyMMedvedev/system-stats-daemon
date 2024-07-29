@@ -10,7 +10,7 @@ import (
 	"github.com/SergeyMMedvedev/system-stats-daemon/pkg/netstat"
 )
 
-type NetstatEntry struct {
+type Entry struct {
 	Proto          string
 	RecvQ          int
 	SendQ          int
@@ -23,18 +23,13 @@ type NetstatEntry struct {
 	Program        string
 }
 
-func parseNetStat(netstat string) []NetstatEntry {
-	fmt.Println(netstat)
-	var entries []NetstatEntry
+func parseNetStat(netstat string) []Entry {
+	var entries []Entry
 
 	scanner := bufio.NewScanner(strings.NewReader(netstat))
 
-	if scanner.Scan() {
-		// The first line is the header, ignore it
-	}
-	if scanner.Scan() {
-		// The second line is the header, ignore it
-	}
+	scanner.Scan() // The first line is the header, ignore it
+	scanner.Scan() // The second line is the header, ignore it
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -70,20 +65,19 @@ func parseNetStat(netstat string) []NetstatEntry {
 		if err != nil {
 			slog.Error("failed to convert LocalPort: " + err.Error())
 		}
-
-		splitPidProgram := strings.Split(pidProgram, "/")
+		var pid int
+		var program string
+		splitPidProgram := strings.SplitN(pidProgram, "/", 2)
 		if len(splitPidProgram) != 2 {
-			slog.Error(
-				"check splitPidProgram. split len: " + err.Error(),
-			)
+			program = "-"
+		} else {
+			pid, err = strconv.Atoi(splitPidProgram[0])
+			if err != nil {
+				slog.Error("failed to convert pid:" + err.Error())
+			}
+			program = splitPidProgram[1]
 		}
-		pid, err := strconv.Atoi(splitPidProgram[0])
-		if err != nil {
-			slog.Error("failed to convert pid:" + err.Error())
-		}
-		program := splitPidProgram[1]
-
-		entry := NetstatEntry{
+		entry := Entry{
 			Proto:          proto,
 			RecvQ:          recvQ,
 			SendQ:          sendQ,
@@ -104,7 +98,7 @@ func parseNetStat(netstat string) []NetstatEntry {
 	return entries
 }
 
-func CollectNetstat() ([]NetstatEntry, error) {
+func CollectNetstat() ([]Entry, error) {
 	netstat, err := netstat.NetStat()
 	if err != nil {
 		return nil, fmt.Errorf("fail to get netstat: %w", err)

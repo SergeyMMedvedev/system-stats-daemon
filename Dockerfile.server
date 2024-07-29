@@ -13,7 +13,8 @@ RUN apt-get update && \
     sysstat sudo net-tools iproute2 tcpdump \
     && rm -rf /var/lib/apt/lists/*
 
-RUN go build -o server /cmd/server/server.go
+RUN go build -o server cmd/server/main.go
 
 # Определяем команду для запуска приложения
-CMD ["./server"]
+CMD ["./server", "--host", "0.0.0.0"]
+# CMD ["bash"]

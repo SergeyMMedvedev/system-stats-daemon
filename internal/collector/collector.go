@@ -3,8 +3,8 @@ package collector
 import (
 	"context"
 	"fmt"
-	_ "fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/SergeyMMedvedev/system-stats-daemon/internal/collector/cpu"
@@ -64,20 +64,26 @@ type TCPStats struct {
 type Collector struct {
 	cfg config.Config
 
+	CPUMu              *sync.Mutex
 	LoadAverageStats   ringbuffer.RingBuffer
-	CpuUserModeStats   ringbuffer.RingBuffer
-	CpuSystemModeStats ringbuffer.RingBuffer
-	CpuIdleStats       ringbuffer.RingBuffer
+	CPUUserModeStats   ringbuffer.RingBuffer
+	CPUSystemModeStats ringbuffer.RingBuffer
+	CPUIdleStats       ringbuffer.RingBuffer
 
-	CpuChan             chan [4]float64
+	CPUChan chan [4]float64
+
+	DisksFreeStatsMu    *sync.Mutex
 	DisksFreeStats      []ringbuffer.RingBuffer
 	DisksFreeInodeStats []ringbuffer.RingBuffer
 	DisksFreeChan       chan []DiskFree
 
+	DisksIoStatMu   *sync.Mutex
 	DisksIoStatBuf  []DiskIoStatBuf
 	DisksIoStatChan chan []DiskIoStat
 
 	NetStatChan chan []NetStat
+
+	TCPStatsMu  *sync.Mutex
 	TCPStatsBuf TCPStatsBuf
 	TCPStatChan chan TCPStats
 }
@@ -87,9 +93,9 @@ func NewCollector(cfg config.Config) *Collector {
 	return &Collector{
 		cfg:                cfg,
 		LoadAverageStats:   *ringbuffer.NewRingBuffer(m),
-		CpuUserModeStats:   *ringbuffer.NewRingBuffer(m),
-		CpuSystemModeStats: *ringbuffer.NewRingBuffer(m),
-		CpuIdleStats:       *ringbuffer.NewRingBuffer(m),
+		CPUUserModeStats:   *ringbuffer.NewRingBuffer(m),
+		CPUSystemModeStats: *ringbuffer.NewRingBuffer(m),
+		CPUIdleStats:       *ringbuffer.NewRingBuffer(m),
 		TCPStatsBuf: TCPStatsBuf{
 			All:      *ringbuffer.NewRingBuffer(m),
 			Estab:    *ringbuffer.NewRingBuffer(m),
@@ -97,6 +103,10 @@ func NewCollector(cfg config.Config) *Collector {
 			Orphaned: *ringbuffer.NewRingBuffer(m),
 			Timewait: *ringbuffer.NewRingBuffer(m),
 		},
+		DisksIoStatMu:    &sync.Mutex{},
+		TCPStatsMu:       &sync.Mutex{},
+		DisksFreeStatsMu: &sync.Mutex{},
+		CPUMu:            &sync.Mutex{},
 	}
 }
 
@@ -112,10 +122,12 @@ func (c *Collector) collectCPUstats(ctx context.Context, cfg config.Config) {
 				slog.Error("collect CPU stats err:" + err.Error())
 				continue
 			}
+			c.CPUMu.Lock()
 			c.LoadAverageStats.Enqueue(loadAverage)
-			c.CpuUserModeStats.Enqueue(userMode)
-			c.CpuSystemModeStats.Enqueue(systemMode)
-			c.CpuIdleStats.Enqueue(idle)
+			c.CPUUserModeStats.Enqueue(userMode)
+			c.CPUSystemModeStats.Enqueue(systemMode)
+			c.CPUIdleStats.Enqueue(idle)
+			c.CPUMu.Unlock()
 			time.Sleep(time.Second)
 		}
 	}
@@ -128,14 +140,18 @@ func (c *Collector) sendCPUstats(ctx context.Context) {
 			slog.Info("Stop send cpu stats")
 			return
 		default:
-			if c.CpuUserModeStats.IsFull() && c.CpuSystemModeStats.IsFull() && c.CpuIdleStats.IsFull() {
-				c.CpuChan <- [4]float64{
+			c.CPUMu.Lock()
+			if c.CPUUserModeStats.IsFull() && c.CPUSystemModeStats.IsFull() && c.CPUIdleStats.IsFull() {
+				slog.Info("send CPUstats")
+				cpu := [4]float64{
 					c.LoadAverageStats.Average(),
-					c.CpuUserModeStats.Average(),
-					c.CpuSystemModeStats.Average(),
-					c.CpuIdleStats.Average(),
+					c.CPUUserModeStats.Average(),
+					c.CPUSystemModeStats.Average(),
+					c.CPUIdleStats.Average(),
 				}
+				c.CPUChan <- cpu
 			}
+			c.CPUMu.Unlock()
 			time.Sleep(time.Second * time.Duration(c.cfg.StatsParams.N))
 		}
 	}
@@ -148,8 +164,10 @@ func (c *Collector) collectDiskFreeStats(ctx context.Context) {
 	}
 	disksNum := len(disks)
 	for i := 0; i < disksNum; i++ {
+		c.DisksFreeStatsMu.Lock()
 		c.DisksFreeStats = append(c.DisksFreeStats, *ringbuffer.NewRingBuffer(c.cfg.StatsParams.M))
 		c.DisksFreeInodeStats = append(c.DisksFreeInodeStats, *ringbuffer.NewRingBuffer(c.cfg.StatsParams.M))
+		c.DisksFreeStatsMu.Unlock()
 	}
 
 	for {
@@ -167,8 +185,10 @@ func (c *Collector) collectDiskFreeStats(ctx context.Context) {
 				slog.Error(err.Error())
 			}
 			for i := 0; i < disksNum; i++ {
+				c.DisksFreeStatsMu.Lock()
 				c.DisksFreeStats[i].Enqueue(disks[i].Use)
 				c.DisksFreeInodeStats[i].Enqueue(disksInode[i].Use)
+				c.DisksFreeStatsMu.Unlock()
 			}
 			time.Sleep(time.Second)
 		}
@@ -188,6 +208,7 @@ func (c *Collector) sendDiskFreeStats(ctx context.Context) {
 			return
 		default:
 			disksFree := make([]DiskFree, 0)
+			c.DisksFreeStatsMu.Lock()
 			if c.DisksFreeStats != nil && c.DisksFreeInodeStats != nil {
 				for i := 0; i < disksNum; i++ {
 					if c.DisksFreeStats[i].IsFull() && c.DisksFreeInodeStats[i].IsFull() {
@@ -198,8 +219,10 @@ func (c *Collector) sendDiskFreeStats(ctx context.Context) {
 						})
 					}
 				}
+				slog.Info("send disksFree stats")
 				c.DisksFreeChan <- disksFree
 			}
+			c.DisksFreeStatsMu.Unlock()
 			time.Sleep(time.Second * time.Duration(c.cfg.StatsParams.N))
 		}
 	}
@@ -217,7 +240,9 @@ func (c *Collector) collectDiskIoStat(ctx context.Context) {
 			KBReadPS: *ringbuffer.NewRingBuffer(c.cfg.StatsParams.M),
 			KBWrtnPS: *ringbuffer.NewRingBuffer(c.cfg.StatsParams.M),
 		}
+		c.DisksIoStatMu.Lock()
 		c.DisksIoStatBuf = append(c.DisksIoStatBuf, d)
+		c.DisksIoStatMu.Unlock()
 	}
 	for {
 		select {
@@ -230,10 +255,12 @@ func (c *Collector) collectDiskIoStat(ctx context.Context) {
 				slog.Error(err.Error())
 			}
 			for i := 0; i < disksNum; i++ {
+				c.DisksIoStatMu.Lock()
 				c.DisksIoStatBuf[i].DiskDevice = disks[i].DiskDevice
 				c.DisksIoStatBuf[i].Tps.Enqueue(disks[i].Tps)
 				c.DisksIoStatBuf[i].KBReadPS.Enqueue(disks[i].KBReadPS)
 				c.DisksIoStatBuf[i].KBWrtnPS.Enqueue(disks[i].KBWrtnPS)
+				c.DisksIoStatMu.Unlock()
 			}
 			time.Sleep(time.Second)
 		}
@@ -253,6 +280,7 @@ func (c *Collector) sendDiskIoStat(ctx context.Context) {
 			return
 		default:
 			disksIoStat := make([]DiskIoStat, 0)
+			c.DisksIoStatMu.Lock()
 			if c.DisksIoStatBuf != nil {
 				for i := 0; i < disksNum; i++ {
 					if len(c.DisksIoStatBuf) == disksNum &&
@@ -267,8 +295,10 @@ func (c *Collector) sendDiskIoStat(ctx context.Context) {
 						})
 					}
 				}
+				slog.Info("send disks Io stats")
 				c.DisksIoStatChan <- disksIoStat
 			}
+			c.DisksIoStatMu.Unlock()
 			time.Sleep(time.Second * time.Duration(c.cfg.StatsParams.N))
 		}
 	}
@@ -297,6 +327,7 @@ func (c *Collector) collectAndSendNetStat(ctx context.Context) {
 				}
 				netStatsResult = append(netStatsResult, n)
 			}
+			slog.Info("send Net Stat")
 			c.NetStatChan <- netStatsResult
 			time.Sleep(time.Second)
 		}
@@ -314,11 +345,13 @@ func (c *Collector) collectTCPStat(ctx context.Context) {
 			if err != nil {
 				slog.Error(err.Error())
 			}
+			c.TCPStatsMu.Lock()
 			c.TCPStatsBuf.All.Enqueue(float64(tcpstats.All))
 			c.TCPStatsBuf.Estab.Enqueue(float64(tcpstats.Estab))
 			c.TCPStatsBuf.Closed.Enqueue(float64(tcpstats.Closed))
 			c.TCPStatsBuf.Orphaned.Enqueue(float64(tcpstats.Orphaned))
 			c.TCPStatsBuf.Timewait.Enqueue(float64(tcpstats.Timewait))
+			c.TCPStatsMu.Unlock()
 			time.Sleep(time.Second)
 		}
 	}
@@ -331,6 +364,7 @@ func (c *Collector) sendTCPStat(ctx context.Context) {
 			slog.Info("Stop collect netstat")
 			return
 		default:
+			c.TCPStatsMu.Lock()
 			if c.TCPStatsBuf.All.IsFull() &&
 				c.TCPStatsBuf.Estab.IsFull() &&
 				c.TCPStatsBuf.Closed.IsFull() &&
@@ -343,8 +377,10 @@ func (c *Collector) sendTCPStat(ctx context.Context) {
 					Orphaned: c.TCPStatsBuf.Orphaned.Average(),
 					Timewait: c.TCPStatsBuf.Timewait.Average(),
 				}
+				slog.Info("send TCP Stat")
 				c.TCPStatChan <- t
 			}
+			c.TCPStatsMu.Unlock()
 			time.Sleep(time.Second * time.Duration(c.cfg.StatsParams.N))
 		}
 	}
@@ -352,7 +388,7 @@ func (c *Collector) sendTCPStat(ctx context.Context) {
 
 func (c *Collector) CollectStats(ctx context.Context) {
 	if c.cfg.StatsParams.CPU {
-		c.CpuChan = make(chan [4]float64)
+		c.CPUChan = make(chan [4]float64)
 		go c.collectCPUstats(ctx, c.cfg)
 		go c.sendCPUstats(ctx)
 	}

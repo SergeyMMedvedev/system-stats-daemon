@@ -1,7 +1,6 @@
 package df
 
 import (
-	_ "fmt"
 	"log/slog"
 	"regexp"
 	"strconv"

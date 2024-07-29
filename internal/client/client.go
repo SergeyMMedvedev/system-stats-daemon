@@ -79,6 +79,71 @@ type Stats struct {
 	TCPStats    TCPStats
 }
 
+func fillRespCPU(stats *Stats, resp *pb.SystemStatsResponse) {
+	stats.LoadAverage = resp.LoadAverage
+	if resp.Cpu != nil {
+		cpuStats := CPUStats{
+			UserMode:   resp.Cpu.UserMode,
+			SystemMode: resp.Cpu.SystemMode,
+			Idle:       resp.Cpu.Idle,
+		}
+		stats.CPUStats = cpuStats
+	}
+}
+
+func fillDisksUsage(stats *Stats, resp *pb.SystemStatsResponse) {
+	disksFree := []DiskFree{}
+	for _, d := range resp.Disks {
+		d := DiskFree{
+			MountedOn: d.Mounted,
+			Use:       d.Use,
+			IUse:      d.Iuse,
+		}
+		disksFree = append(disksFree, d)
+	}
+	stats.DisksFree = disksFree
+}
+
+func fillIoStats(stats *Stats, resp *pb.SystemStatsResponse) {
+	disksIoStats := []DiskIoStat{}
+	for _, ioStat := range resp.Iostat {
+		io := DiskIoStat{
+			DiskDevice: ioStat.DiskDevice,
+			Tps:        ioStat.Tps,
+			KBReadPS:   ioStat.KbRead,
+			KBWrtnPS:   ioStat.KbWrtn,
+		}
+		disksIoStats = append(disksIoStats, io)
+	}
+	stats.DisksIoStat = disksIoStats
+}
+
+func fillNetStat(stats *Stats, resp *pb.SystemStatsResponse) {
+	netStats := []NetStat{}
+	for _, netStat := range resp.Netstat {
+		nt := NetStat{
+			ProgramName: netStat.Program,
+			Pid:         int(netStat.Pid),
+			User:        netStat.User,
+			Protocol:    netStat.Protocol,
+			Port:        int(netStat.Port),
+			State:       netStat.State,
+		}
+		netStats = append(netStats, nt)
+	}
+	stats.NetStat = netStats
+	if resp.Tcpstat != nil {
+		tcpstats := TCPStats{
+			All:      int(resp.Tcpstat.All),
+			Estab:    int(resp.Tcpstat.Estab),
+			Closed:   int(resp.Tcpstat.Closed),
+			Orphaned: int(resp.Tcpstat.Orphaned),
+			Timewait: int(resp.Tcpstat.Timewait),
+		}
+		stats.TCPStats = tcpstats
+	}
+}
+
 func (c *Client) StreamSystemStats(ctx context.Context, req *pb.SystemStatsRequest) error {
 	stream, err := c.cl.StreamSystemStats(ctx, req)
 	if err != nil {
@@ -92,76 +157,25 @@ func (c *Client) StreamSystemStats(ctx context.Context, req *pb.SystemStatsReque
 		if err != nil {
 			slog.Error(fmt.Sprintf("error receiving response: %v", err))
 		}
-		stats := Stats{}
+		stats := &Stats{}
 		if c.cfg.StatsParams.CPU {
-			stats.LoadAverage = resp.LoadAverage
-			if resp.Cpu != nil {
-				cpuStats := CPUStats{
-					UserMode:   resp.Cpu.UserMode,
-					SystemMode: resp.Cpu.SystemMode,
-					Idle:       resp.Cpu.Idle,
-				}
-				stats.CPUStats = cpuStats
-			}
+			fillRespCPU(stats, resp)
 		}
 		if c.cfg.StatsParams.DisksUsage {
-			disksFree := []DiskFree{}
-			for _, d := range resp.Disks {
-				d := DiskFree{
-					MountedOn: d.Mounted,
-					Use:       d.Use,
-					IUse:      d.Iuse,
-				}
-				disksFree = append(disksFree, d)
-			}
-			stats.DisksFree = disksFree
+			fillDisksUsage(stats, resp)
 		}
 		if c.cfg.StatsParams.DisksIoStat {
-			disksIoStats := []DiskIoStat{}
-			for _, ioStat := range resp.Iostat {
-				io := DiskIoStat{
-					DiskDevice: ioStat.DiskDevice,
-					Tps:        ioStat.Tps,
-					KBReadPS:   ioStat.KbRead,
-					KBWrtnPS:   ioStat.KbWrtn,
-				}
-				disksIoStats = append(disksIoStats, io)
-			}
-			stats.DisksIoStat = disksIoStats
+			fillIoStats(stats, resp)
 		}
-
 		if c.cfg.StatsParams.NetStat {
-			netStats := []NetStat{}
-			for _, netStat := range resp.Netstat {
-				nt := NetStat{
-					ProgramName: netStat.Program,
-					Pid:         int(netStat.Pid),
-					User:        netStat.User,
-					Protocol:    netStat.Protocol,
-					Port:        int(netStat.Port),
-					State:       netStat.State,
-				}
-				netStats = append(netStats, nt)
-			}
-			stats.NetStat = netStats
-			if resp.Tcpstat != nil {
-				tcpstats := TCPStats{
-					All:      int(resp.Tcpstat.All),
-					Estab:    int(resp.Tcpstat.Estab),
-					Closed:   int(resp.Tcpstat.Closed),
-					Orphaned: int(resp.Tcpstat.Orphaned),
-					Timewait: int(resp.Tcpstat.Timewait),
-				}
-				stats.TCPStats = tcpstats
-			}
+			fillNetStat(stats, resp)
 		}
-
 		s, err := json.MarshalIndent(stats, "", "  ")
 		if err != nil {
 			slog.Error(err.Error())
 		}
 		fmt.Println(string(s))
-		time.Sleep(1 * time.Second)
+		time.Sleep(time.Duration(c.cfg.StatsParams.N))
 	}
 	return nil
 }

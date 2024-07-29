@@ -4,8 +4,8 @@ logger:
 statsParams:
   m: 4
   n: 2
-  cpu: false
+  cpu: true
   disksUsage: true
   disksIoStat: true
-  netStat: false
+  netStat: true
 

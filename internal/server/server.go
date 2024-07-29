@@ -27,12 +27,13 @@ func (s *Server) StreamSystemStats(
 	stream pb.SystemStatsService_StreamSystemStatsServer,
 ) error {
 	statsCollector := collector.NewCollector(s.cfg)
+	slog.Info("Starting collect stats...")
 	statsCollector.CollectStats(context.Background())
 	for {
 		resp := &pb.SystemStatsResponse{}
 		if s.cfg.StatsParams.CPU {
 			resp.Cpu = &pb.CPU{}
-			cpuStats := <-statsCollector.CpuChan
+			cpuStats := <-statsCollector.CPUChan
 			resp.LoadAverage = cpuStats[0]
 			resp.Cpu.UserMode = cpuStats[1]
 			resp.Cpu.SystemMode = cpuStats[2]
@@ -89,7 +90,7 @@ func (s *Server) StreamSystemStats(
 		if err := stream.Send(resp); err != nil {
 			return err
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(time.Second * time.Duration(s.cfg.StatsParams.N))
 	}
 }
 

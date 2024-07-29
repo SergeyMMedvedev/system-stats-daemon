@@ -2,6 +2,7 @@ package cpu_test
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/SergeyMMedvedev/system-stats-daemon/internal/collector/cpu"
@@ -9,13 +10,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var cfg = c.Config{
-	StatsParams: c.StatsParamsConf{
-		OS: c.OSLinux,
-	},
+func TestCollectCPUStatsLinux(t *testing.T) {
+	os := runtime.GOOS
+	if os != "linux" {
+		t.Skip(fmt.Printf("skip wmic test for %s", os))
+	}
+	var cfg = c.Config{
+		StatsParams: c.StatsParamsConf{
+			OS: c.OSLinux,
+		},
+	}
+	loadAvg, us, sy, id, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
+	fmt.Printf("loadAvg: %f, us: %f, sy: %f, id: %f", loadAvg, us, sy, id)
+	require.NoError(t, err)
 }
 
-func TestCollectCPUStats(t *testing.T) {
+func TestCollectCPUStatsWin(t *testing.T) {
+	os := runtime.GOOS
+	if os != "windows" {
+		t.Skip(fmt.Printf("skip wmic test for %s", os))
+	}
+	var cfg = c.Config{
+		StatsParams: c.StatsParamsConf{
+			OS: c.OSWindows,
+		},
+	}
 	loadAvg, us, sy, id, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
 	fmt.Printf("loadAvg: %f, us: %f, sy: %f, id: %f", loadAvg, us, sy, id)
 	require.NoError(t, err)

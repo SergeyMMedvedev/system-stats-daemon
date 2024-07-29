@@ -58,11 +58,11 @@ func CollectIoStat() ([]Disk, error) {
 	}
 	hosts := stats.Sysstat.Hosts
 	if len(hosts) == 0 {
-		return nil, fmt.Errorf("Systats hosts length is 0")
+		return nil, fmt.Errorf("systats hosts length is 0")
 	}
 	statistics := hosts[0].Statistics
 	if len(statistics) == 0 {
-		return nil, fmt.Errorf("Systats statistics length is 0")
+		return nil, fmt.Errorf("systats statistics length is 0")
 	}
 	return statistics[0].Disk, nil
 }

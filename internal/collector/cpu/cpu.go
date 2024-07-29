@@ -48,7 +48,6 @@ func parseCPUStats(s string) (float64, float64, float64, error) {
 			continue
 		}
 		res[i] = fl
-
 	}
 	return res[0], res[1], res[2], nil
 }
