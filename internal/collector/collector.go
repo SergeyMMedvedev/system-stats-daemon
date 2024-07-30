@@ -128,6 +128,8 @@ func (c *Collector) collectCPUstats(ctx context.Context, cfg config.Config) {
 			c.CPUSystemModeStats.Enqueue(systemMode)
 			c.CPUIdleStats.Enqueue(idle)
 			c.CPUMu.Unlock()
+			fmt.Println("loadAverage", loadAverage, "userMode", userMode, "systemMode", systemMode, "idle", idle)
+			fmt.Println("CPUUserModeStats", c.CPUUserModeStats)
 			time.Sleep(time.Second)
 		}
 	}

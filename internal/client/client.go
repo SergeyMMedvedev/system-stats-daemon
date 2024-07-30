@@ -16,8 +16,9 @@ import (
 )
 
 type Client struct {
-	cl  pb.SystemStatsServiceClient
-	cfg config.Config
+	cl                   pb.SystemStatsServiceClient
+	cfg                  config.Config
+	SystemStatsResponses []*Stats
 }
 
 func (c *Client) Connect(host string, port int, cfg config.Config) error {
@@ -149,6 +150,7 @@ func (c *Client) StreamSystemStats(ctx context.Context, req *pb.SystemStatsReque
 	if err != nil {
 		return fmt.Errorf("StreamSystemStats err: %v", err.Error())
 	}
+	c.SystemStatsResponses = []*Stats{}
 	for {
 		resp, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -156,6 +158,7 @@ func (c *Client) StreamSystemStats(ctx context.Context, req *pb.SystemStatsReque
 		}
 		if err != nil {
 			slog.Error(fmt.Sprintf("error receiving response: %v", err))
+			break
 		}
 		stats := &Stats{}
 		if c.cfg.StatsParams.CPU {
@@ -174,10 +177,11 @@ func (c *Client) StreamSystemStats(ctx context.Context, req *pb.SystemStatsReque
 		if err != nil {
 			slog.Error(err.Error())
 		}
+		c.SystemStatsResponses = append(c.SystemStatsResponses, stats)
 		fmt.Println(string(s))
 		time.Sleep(time.Duration(c.cfg.StatsParams.N))
 	}
-	return nil
+	return err
 }
 
 func NewClient() *Client {
