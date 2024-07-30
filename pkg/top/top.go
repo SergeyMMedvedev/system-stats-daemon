@@ -5,7 +5,7 @@ import (
 )
 
 func Top() (string, error) {
-	cmd := exec.Command("top", "-b", "-n1")
+	cmd := exec.Command("top", "-b", "-n3", "-d", "0.1")
 	stdout, err := cmd.Output()
 	if err != nil {
 		return "", err

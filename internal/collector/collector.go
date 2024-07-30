@@ -117,19 +117,17 @@ func (c *Collector) collectCPUstats(ctx context.Context, cfg config.Config) {
 			slog.Info("Stop collect cpu stats")
 			return
 		default:
-			loadAverage, userMode, systemMode, idle, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
+			loadAverage, cpuStats, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
 			if err != nil {
 				slog.Error("collect CPU stats err:" + err.Error())
 				continue
 			}
 			c.CPUMu.Lock()
 			c.LoadAverageStats.Enqueue(loadAverage)
-			c.CPUUserModeStats.Enqueue(userMode)
-			c.CPUSystemModeStats.Enqueue(systemMode)
-			c.CPUIdleStats.Enqueue(idle)
+			c.CPUUserModeStats.Enqueue(cpuStats.UserMode)
+			c.CPUSystemModeStats.Enqueue(cpuStats.SystemMode)
+			c.CPUIdleStats.Enqueue(cpuStats.Idle)
 			c.CPUMu.Unlock()
-			fmt.Println("loadAverage", loadAverage, "userMode", userMode, "systemMode", systemMode, "idle", idle)
-			fmt.Println("CPUUserModeStats", c.CPUUserModeStats)
 			time.Sleep(time.Second)
 		}
 	}

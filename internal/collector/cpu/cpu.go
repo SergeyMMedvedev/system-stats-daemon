@@ -19,7 +19,7 @@ var (
 
 func init() {
 	reLoadAverage = regexp.MustCompile(`load average:\s([\d\.]+)`)
-	cpuStats = regexp.MustCompile(`(\d+\.\d+ (us|sy|id))`)
+	cpuStats = regexp.MustCompile(`(\d+\.\d+ (us|sy|id),)`)
 }
 
 func parseLoadAverage(s string) (float64, error) {
@@ -34,51 +34,79 @@ func parseLoadAverage(s string) (float64, error) {
 	return res, nil
 }
 
-func parseCPUStats(s string) (float64, float64, float64, error) {
-	res := [3]float64{}
-	match := cpuStats.FindAllStringSubmatch(s, -1)
-	if len(match) < 3 {
-		return 0, 0, 0, fmt.Errorf("parseCPUStats match error")
-	}
-	for i, sub := range match {
-		spl := strings.Split(sub[1], " ")
-		fl, err := strconv.ParseFloat(spl[0], 64)
-		if err != nil {
-			slog.Error(err.Error())
-			continue
-		}
-		res[i] = fl
-	}
-	return res[0], res[1], res[2], nil
+type CPUStats struct {
+	UserMode   float64
+	SystemMode float64
+	Idle       float64
 }
 
-func collectLinuxCPUStats() (float64, float64, float64, float64, error) {
-	cpuStats, err := top.Top()
+func parseCPUStats(s string) (CPUStats, error) {
+	cpuStatsArr := []CPUStats{}
+	match := cpuStats.FindAllStringSubmatch(s, -1)
+	if len(match) < 3 {
+		return CPUStats{}, fmt.Errorf("parseCPUStats match error")
+	}
+	for i := 0; i < len(match); i += 3 {
+		cpuStats := CPUStats{}
+		for j := i; j < i+3; j++ {
+			sub := match[j]
+			spl := strings.Split(sub[1], " ")
+			cpuMode := spl[1]
+			value, err := strconv.ParseFloat(spl[0], 64)
+			if err != nil {
+				slog.Error(err.Error())
+				continue
+			}
+			switch {
+			case strings.HasPrefix(cpuMode, "us"):
+				cpuStats.UserMode = value
+			case strings.HasPrefix(cpuMode, "sy"):
+				cpuStats.SystemMode = value
+			case strings.HasPrefix(cpuMode, "id"):
+				cpuStats.Idle = value
+			}
+		}
+		cpuStatsArr = append(cpuStatsArr, cpuStats)
+	}
+	cpuStatsMinIdle := cpuStatsArr[0]
+	for _, cpuStats := range cpuStatsArr {
+		if cpuStats.Idle < cpuStatsMinIdle.Idle {
+			cpuStatsMinIdle = cpuStats
+		}
+	}
+	return cpuStatsMinIdle, nil
+}
+
+func collectLinuxCPUStats() (loadAvg float64, cpuStats CPUStats, err error) {
+	cpuStatsStr, err := top.Top()
 	if err != nil {
 		slog.Error(err.Error())
 	}
-	lines := strings.Split(cpuStats, "\n")
+	lines := strings.Split(cpuStatsStr, "\n")
 
-	loadAvg, err := parseLoadAverage(lines[0])
+	loadAvg, err = parseLoadAverage(lines[0])
 	if err != nil {
-		return 0, 0, 0, 0, err
+		return 0, cpuStats, err
 	}
-	us, sy, id, err := parseCPUStats(lines[2])
+	cpuStats, err = parseCPUStats(cpuStatsStr)
 	if err != nil {
-		return 0, 0, 0, 0, err
+		return 0, cpuStats, err
 	}
-	return loadAvg, us, sy, id, nil
+	return loadAvg, cpuStats, nil
 }
 
-func collectWindowsCPUStats() (float64, float64, float64, float64, error) {
+func collectWindowsCPUStats() (loadAvg float64, cpuStats CPUStats, err error) {
 	p, err := wmic.CPUGetLoadPercentage()
 	if err != nil {
-		return 0, 0, 0, 0, err
+		return 0, cpuStats, err
 	}
-	return 0, float64(p), float64(p), float64(100 - p), nil
+	cpuStats.UserMode = float64(p)
+	cpuStats.SystemMode = float64(p)
+	cpuStats.Idle = float64(100 - p)
+	return 0, cpuStats, nil
 }
 
-func CollectCPUStats(os config.OS) (float64, float64, float64, float64, error) {
+func CollectCPUStats(os config.OS) (loadAvg float64, cpuStats CPUStats, err error) {
 	if os == config.OSWindows {
 		return collectWindowsCPUStats()
 	}
