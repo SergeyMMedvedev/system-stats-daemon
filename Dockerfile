@@ -1,5 +1,5 @@
 # Базовый образ Ubuntu
-FROM golang:1.22
+FROM golang:1.22.2
 
 # Создаем рабочую директорию
 WORKDIR /app
@@ -16,3 +16,4 @@ RUN apt-get update && \
 
 # Определяем команду для запуска приложения
 CMD ["bash"]
+# CMD ["./server", "--host", "0.0.0.0"]
