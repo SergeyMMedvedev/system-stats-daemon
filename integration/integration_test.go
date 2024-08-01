@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"fmt"
-	_ "os"
 	"os/exec"
 	"sync"
 	"testing"
@@ -13,7 +12,6 @@ import (
 	"github.com/SergeyMMedvedev/system-stats-daemon/internal/config"
 	"github.com/SergeyMMedvedev/system-stats-daemon/internal/pb"
 	"github.com/stretchr/testify/require"
-	_ "google.golang.org/grpc"
 )
 
 func TestIntegration(t *testing.T) {
@@ -43,8 +41,22 @@ func TestIntegration(t *testing.T) {
 	fmt.Println("Connected to server")
 	require.NoError(t, err)
 	ctx := context.Background()
-	timeout := time.Second * time.Duration(cfg.StatsParams.N*40)
-	ctxTimeout, cancel := context.WithTimeout(ctx, timeout)
+
+	// prepare stats collecting params
+	collectingIters := 10
+	statsCollectingTimeout := time.Second * time.Duration(
+		cfg.StatsParams.N*collectingIters,
+	)
+	halfPeriod := statsCollectingTimeout / 2
+	fmt.Println("Stats collecting timeout:", statsCollectingTimeout)
+	fmt.Println("halfPeriod:", halfPeriod)
+	cpuStressPeriod := fmt.Sprintf("%ds", cfg.StatsParams.N*collectingIters/2)
+	cpuLoadThreads := "16"
+	fmt.Println("CPU stress period:", cpuStressPeriod)
+	fmt.Println("CPU load threads:", cpuLoadThreads)
+
+	// Step 4: Collect system stats
+	ctxTimeout, cancel := context.WithTimeout(ctx, statsCollectingTimeout)
 	defer cancel()
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -57,17 +69,43 @@ func TestIntegration(t *testing.T) {
 		}
 		wg.Done()
 	}()
-	time.Sleep(time.Duration(cfg.StatsParams.N*20) * time.Second)
+	fmt.Println(
+		"Collect statistics for the first half of the time without loading the processor...",
+	)
+	time.Sleep(halfPeriod)
 	// Step 4: Execute cpu stress test on the server
 	fmt.Println("Executing CPU stress test on the server...")
-	cmd = exec.Command("docker", "compose", "exec", "server", "stress", "-q", "-t", "40s", "--cpu", "16")
+	cmd = exec.Command(
+		"docker", "compose", "exec", "server", "stress", "-q", "-t", cpuStressPeriod, "--cpu", cpuLoadThreads,
+	)
 	err = cmd.Run()
 	require.NoError(t, err)
 
 	wg.Wait()
 	stats := c.SystemStatsResponses
-	for _, stat := range stats {
-		fmt.Printf("CPU LoadAverage: %f\n", stat.LoadAverage)
-		fmt.Printf("CPU Stats: %+v\n", stat.CPUStats)
+	statsWithoutStress := stats[:len(stats)/2]
+	statsWithStress := stats[len(stats)/2:]
+	lastStat := stats[len(stats)-1]
+
+	getAverageUserModeCPULoad := func(stats []*client.Stats) float32 {
+		sum := float32(0)
+		for _, stat := range stats {
+			sum += float32(stat.CPUStats.UserMode)
+		}
+		return sum / float32(len(stats))
 	}
+
+	// Step 5: Verify system stats
+	averageUserModeCPULoadWithoutStress := getAverageUserModeCPULoad(statsWithoutStress)
+	averageUserModeCPULoadWithStress := getAverageUserModeCPULoad(statsWithStress)
+
+	fmt.Println("Average User Mode CPU Load without stress:", averageUserModeCPULoadWithoutStress)
+	fmt.Println("Average User Mode CPU Load with stress:", averageUserModeCPULoadWithStress)
+	require.True(t, averageUserModeCPULoadWithStress > averageUserModeCPULoadWithoutStress)
+	require.True(t, len(lastStat.DisksFree) > 0)
+	require.True(t, len(lastStat.DisksIoStat) > 0)
+	require.True(t, len(lastStat.NetStat) > 0)
+	estabTCPconns := lastStat.TCPStats.Estab
+	require.True(t, estabTCPconns > 0)
+	fmt.Println("Integration test passed successfully.")
 }
