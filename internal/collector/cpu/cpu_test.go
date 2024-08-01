@@ -20,8 +20,8 @@ func TestCollectCPUStatsLinux(t *testing.T) {
 			OS: c.OSLinux,
 		},
 	}
-	loadAvg, us, sy, id, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
-	fmt.Printf("loadAvg: %f, us: %f, sy: %f, id: %f", loadAvg, us, sy, id)
+	cpuStats, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
+	fmt.Printf("loadAvg: %f, us: %f, sy: %f, id: %f", cpuStats.L, us, sy, id)
 	require.NoError(t, err)
 }
 
