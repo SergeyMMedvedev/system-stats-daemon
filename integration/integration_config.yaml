@@ -1,0 +1,11 @@
+logger:
+  level: "INFO"
+
+statsParams:
+  m: 4
+  n: 2
+  cpu: true
+  disksUsage: true
+  disksIoStat: true
+  netStat: true
+
