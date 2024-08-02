@@ -34,20 +34,20 @@ func parseLoadAverage(s string) (float64, error) {
 	return res, nil
 }
 
-type CPUStats struct {
+type Stats struct {
 	UserMode   float64
 	SystemMode float64
 	Idle       float64
 }
 
-func parseCPUStats(s string) (CPUStats, error) {
-	cpuStatsArr := []CPUStats{}
+func parseCPUStats(s string) (Stats, error) {
+	cpuStatsArr := []Stats{}
 	match := cpuStats.FindAllStringSubmatch(s, -1)
 	if len(match) < 3 {
-		return CPUStats{}, fmt.Errorf("parseCPUStats match error")
+		return Stats{}, fmt.Errorf("parseCPUStats match error")
 	}
 	for i := 0; i < len(match); i += 3 {
-		cpuStats := CPUStats{}
+		cpuStats := Stats{}
 		for j := i; j < i+3; j++ {
 			sub := match[j]
 			spl := strings.Split(sub[1], " ")
@@ -77,7 +77,7 @@ func parseCPUStats(s string) (CPUStats, error) {
 	return cpuStatsMinIdle, nil
 }
 
-func collectLinuxCPUStats() (loadAvg float64, cpuStats CPUStats, err error) {
+func collectLinuxCPUStats() (loadAvg float64, cpuStats Stats, err error) {
 	cpuStatsStr, err := top.Top()
 	if err != nil {
 		slog.Error(err.Error())
@@ -95,7 +95,7 @@ func collectLinuxCPUStats() (loadAvg float64, cpuStats CPUStats, err error) {
 	return loadAvg, cpuStats, nil
 }
 
-func collectWindowsCPUStats() (loadAvg float64, cpuStats CPUStats, err error) {
+func collectWindowsCPUStats() (loadAvg float64, cpuStats Stats, err error) {
 	p, err := wmic.CPUGetLoadPercentage()
 	if err != nil {
 		return 0, cpuStats, err
@@ -106,7 +106,7 @@ func collectWindowsCPUStats() (loadAvg float64, cpuStats CPUStats, err error) {
 	return 0, cpuStats, nil
 }
 
-func CollectCPUStats(os config.OS) (loadAvg float64, cpuStats CPUStats, err error) {
+func CollectCPUStats(os config.OS) (loadAvg float64, cpuStats Stats, err error) {
 	if os == config.OSWindows {
 		return collectWindowsCPUStats()
 	}

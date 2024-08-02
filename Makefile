@@ -6,8 +6,14 @@ install-lint-deps:
 lint: install-lint-deps
 	golangci-lint run ./...
 
+# Все тесты кроме интеграционных
 test:
-	go test -timeout 12m -race -count 2 ./...
+	go test $(go list ./... | grep -v github.com/SergeyMMedvedev/system-stats-daemon/integration) -race -count 2 ./...
+
+# Интеграционные тесты
+test-integration:
+	go test -timeout 10m -count 1 ./integration/integration_test.go
+
 
 generate:
 	rm -rf internal/pb

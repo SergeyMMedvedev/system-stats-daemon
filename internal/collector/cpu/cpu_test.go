@@ -20,8 +20,8 @@ func TestCollectCPUStatsLinux(t *testing.T) {
 			OS: c.OSLinux,
 		},
 	}
-	cpuStats, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
-	fmt.Printf("loadAvg: %f, us: %f, sy: %f, id: %f", cpuStats.L, us, sy, id)
+	loadAvg, cpuStats, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
+	fmt.Printf("loadAvg: %f, us: %f, sy: %f, id: %f", loadAvg, cpuStats.UserMode, cpuStats.SystemMode, cpuStats.Idle)
 	require.NoError(t, err)
 }
 
@@ -35,7 +35,7 @@ func TestCollectCPUStatsWin(t *testing.T) {
 			OS: c.OSWindows,
 		},
 	}
-	loadAvg, us, sy, id, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
-	fmt.Printf("loadAvg: %f, us: %f, sy: %f, id: %f", loadAvg, us, sy, id)
+	loadAvg, cpuStats, err := cpu.CollectCPUStats(cfg.StatsParams.OS)
+	fmt.Printf("loadAvg: %f, us: %f, sy: %f, id: %f", loadAvg, cpuStats.UserMode, cpuStats.SystemMode, cpuStats.Idle)
 	require.NoError(t, err)
 }
