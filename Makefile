@@ -8,7 +8,7 @@ lint: install-lint-deps
 
 # Все тесты кроме интеграционных
 test:
-	go test $(go list ./... | grep -v github.com/SergeyMMedvedev/system-stats-daemon/integration) -race -count 2 ./...
+	go test $(shell go list ./... | grep -v github.com/SergeyMMedvedev/system-stats-daemon/integration) -race -count 2 ./...
 
 # Интеграционные тесты
 test-integration:
